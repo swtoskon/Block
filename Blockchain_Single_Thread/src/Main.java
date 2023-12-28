@@ -18,7 +18,7 @@ public class Main {
     public static void main(String args[])
     {
         DBManager dbmanage = new DBManager();
-        menu();                                               //Menu functions
+        menu();                                              //Menu functions
         while(true) {
             if (menuchoice == 1) {                           //View all products
                 String url = "jdbc:sqlite:database.sqlite";

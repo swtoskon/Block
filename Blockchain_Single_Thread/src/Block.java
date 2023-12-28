@@ -1,6 +1,7 @@
 import java.util.Date;
 import java.lang.System;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+
 
 
 public class Block {
@@ -9,6 +10,7 @@ public class Block {
     private String data;
     private long timeStamp;
     private int nonce;
+    private boolean miningfinish; //Needed to find out whether a thread has finished its work
 
 
     public Block(String data,String previousHash) {
@@ -16,31 +18,51 @@ public class Block {
         this.previousHash = previousHash;
         this.timeStamp = new Date().getTime();
         this.nonce = Integer.MIN_VALUE;
-        this.hash = calculateHash();
-    }
+        this.hash = calculateHash(this.nonce);
+    }                           
 
-    public String calculateHash() {
+    public String calculateHash(int x) {
         String calculatedhash = StringUtil.applySha256(
                 previousHash +
                         Long.toString(timeStamp) +
-                        Integer.toString(nonce) +
+                        Integer.toString(x) +
                         data
         );
         return calculatedhash;
     }
 
+    synchronized boolean isMiningfinish(){
+        return miningfinish;
+    }
 
     public void mineBlock(int difficulty) {
+        miningfinish = false;
         long startTime = System.nanoTime();
-        String target = new String(new char[difficulty]).replace('\0', '0');
-        while(!hash.substring( 0, difficulty).equals(target)) {
-            nonce ++;
-            hash = calculateHash();
-        }
-        long endTime = System.nanoTime();
-        long convert = TimeUnit.SECONDS.convert(endTime-startTime, TimeUnit.NANOSECONDS);
-        System.out.println("Latest Block Mined Successfully with hash : " + hash);
-        System.out.println("Current block's mining took: "+convert+" seconds");
+        ExecutorService executor = Executors.newFixedThreadPool(5);  //Using 5 threads.
+        Runnable runnableTask = () -> {
+                String target = new String(new char[difficulty]).replace('\0', '0');
+                int tnonce = this.nonce;    //each thread will save a copy of the initial nonce and hash in order not to mess the original ones up
+                String thash = this.hash;
+                while(!thash.substring( 0, difficulty).equals(target)&&!miningfinish) {
+                    tnonce ++;
+                    thash = calculateHash(tnonce);
+                }
+                miningfinish = true;
+
+                    synchronized (this) {
+                        if (miningfinish&&thash.substring( 0, difficulty).equals(target)) {
+                            this.nonce = tnonce;
+                            this.hash = thash;
+                            long endTime = System.nanoTime();
+                            long convert = TimeUnit.SECONDS.convert(endTime - startTime, TimeUnit.NANOSECONDS);
+                            System.out.println("Latest Block Mined Successfully with hash : " + hash);
+                            System.out.println("Current block's mining took: " + convert + " seconds");
+                            executor.shutdown();
+                        }
+                    }
+        };
+        executor.execute(runnableTask);
+        while (!isMiningfinish()){} // wait till mining done, otherwise program would continue and mess the execution order
     }
 
 
